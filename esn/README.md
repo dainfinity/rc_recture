@@ -1,28 +1,30 @@
-# Echo State Network (ESN) Implementation
+# Echo State Network (ESN) 実装
 
-PyTorchベースの拡張可能なEcho State Network実装です。Short Term Memoryタスクによるメモリ容量評価機能を含みます。
+PyTorchベースの拡張可能なEcho State Network実装です。Short Term Memory (STM) タスクとNARMAタスクによる包括的な評価機能を含んでいます。
 
 ## 特徴
 
-- **拡張可能な設計**: モジュール化されたアーキテクチャで、新しいタスクや評価方法を簡単に追加可能
-- **完全なPyTorch実装**: 自動微分とGPU加速をサポート
-- **包括的な評価ツール**: Memory Capacity測定、パラメータ比較、ベンチマークツール
-- **豊富な使用例**: 時系列予測、Mackey-Glass系列、STMタスクなどの実用例
+- **拡張可能な設計**: モジュール化されたアーキテクチャにより、新しいタスクや評価方法を簡単に追加できます
+- **完全なPyTorch実装**: 自動微分とGPU加速をサポートしています
+- **包括的な評価ツール**: Memory Capacity測定、NARMAタスク、パラメータ比較、ベンチマークツールを提供します
+- **豊富な使用例**: 時系列予測、Mackey-Glass系列、STMタスク、NARMAタスクなどの実用例が含まれています
 
 ## パッケージ構成
 
 ```
 esn/
 ├── __init__.py          # パッケージ初期化
-├── model.py             # 核心ESN実装
+├── model.py             # 核心となるESN実装
 ├── stm_task.py          # Short Term Memoryタスク
+├── narma_task.py        # NARMAタスク実装
+├── test_narma.py        # NARMAタスクテスト
 ├── examples.py          # 使用例とベンチマーク
 └── README.md           # このファイル
 ```
 
 ## インストール
 
-必要な依存関係をインストール：
+必要な依存関係をインストールしてください：
 
 ```bash
 pip install torch numpy matplotlib
@@ -58,7 +60,11 @@ esn.fit(x, y, washout=50)
 predictions = esn.predict(x)
 ```
 
-### Memory Capacity評価
+## ベンチマークタスク
+
+### 1. Short Term Memory (STM) タスク
+
+#### Memory Capacity評価
 
 ```python
 from esn import evaluate_memory_capacity
@@ -77,7 +83,7 @@ print(f"Total Memory Capacity: {results['total_capacity']:.2f}")
 print(f"Capacity Ratio: {results['capacity_ratio']:.2f}")
 ```
 
-### 遅延の詳細可視化
+#### 遅延の詳細可視化
 
 ```python
 from esn import plot_delay_accuracy, plot_scatter_accuracy
@@ -97,38 +103,108 @@ plot_scatter_accuracy(
 )
 ```
 
-### パラメータ比較
+### 2. NARMA (Non-linear Auto-Regressive Moving Average) タスク
 
-```python
-from esn import compare_esn_parameters, plot_parameter_comparison
+#### NARMAタスクについて
 
-# 複数のスペクトル半径を比較
-parameter_ranges = {
-    'spectral_radius': [0.1, 0.5, 0.9, 0.95, 0.99, 1.1]
-}
+NARMA-m タスクは、以下の非線形自己回帰移動平均方程式に基づく標準的なベンチマークです：
 
-comparison_results = compare_esn_parameters(
-    parameter_ranges=parameter_ranges,
-    reservoir_size=100
-)
-
-# 結果をプロット
-plot_parameter_comparison(comparison_results)
+```
+y(n+1) = 0.3*y(n) + 0.05*y(n)*sum(y(n-i), i=0 to m-1) + 1.5*u(n-m)*u(n) + 0.1
 ```
 
-## ESNパラメータ
+ここで：
+- `y(n)` は時刻nでの出力
+- `u(n)` は時刻nでの入力
+- `m` はNARMAシステムの次数
 
-| パラメータ | 説明 | 推奨範囲 |
-|-----------|------|---------|
-| `input_size` | 入力特徴数 | データに依存 |
-| `reservoir_size` | リザーバーサイズ | 50-500 |
-| `output_size` | 出力特徴数 | データに依存 |
-| `spectral_radius` | スペクトル半径 | 0.9-0.99 |
-| `input_scaling` | 入力スケーリング | 0.1-2.0 |
-| `connectivity` | 接続密度 | 0.1-0.3 |
-| `leaking_rate` | リーク率 | 0.1-1.0 |
-| `bias_scaling` | バイアススケーリング | 0.0-1.0 |
-| `noise_level` | ノイズレベル | 0.0-0.1 |
+#### 基本的な使用例
+
+```python
+from esn.narma_task import run_narma_experiment
+
+# NARMA-10 タスクの実行
+results = run_narma_experiment(
+    order=10,                 # NARMA次数
+    reservoir_size=100,       # リザーバサイズ
+    spectral_radius=0.95,     # スペクトル半径
+    sequence_length=2000,     # データ長
+    train_ratio=0.7,          # 訓練データの割合
+    washout=100,              # ウォッシュアウト期間
+    random_state=42,          # 乱数シード
+    plot_results=True         # 結果の可視化
+)
+
+print(f"RMSE: {results['rmse']:.6f}")
+print(f"NMSE: {results['nmse']:.6f}")
+print(f"R²: {results['r2']:.6f}")
+```
+
+#### 複数次数の比較
+
+```python
+from esn.narma_task import compare_narma_orders
+
+# 異なるNARMA次数での比較
+comparison_results = compare_narma_orders(
+    orders=[3, 5, 8, 10],
+    reservoir_size=100,
+    sequence_length=1500,
+    random_state=42
+)
+```
+
+#### コマンドラインからの実行
+
+```bash
+# メインのデモンストレーション
+python esn/narma_task.py
+
+# テストスクリプトの実行
+python esn/test_narma.py
+```
+
+## パラメータ設定
+
+### ESNパラメータ
+
+| パラメータ | 説明 | STM推奨範囲 | NARMA推奨範囲 |
+|-----------|------|------------|---------------|
+| `input_size` | 入力特徴数 | データに依存 | 1 |
+| `reservoir_size` | リザーバサイズ | 50-500 | 50-200 |
+| `output_size` | 出力特徴数 | データに依存 | 1 |
+| `spectral_radius` | スペクトル半径 | 0.9-0.99 | 0.9-0.99 |
+| `input_scaling` | 入力スケーリング | 0.1-2.0 | 0.1-1.0 |
+| `connectivity` | 接続密度 | 0.1-0.3 | 0.1-0.3 |
+| `leaking_rate` | リーク率 | 0.1-1.0 | 0.1-1.0 |
+| `bias_scaling` | バイアススケーリング | 0.0-1.0 | 0.0-1.0 |
+| `noise_level` | ノイズレベル | 0.0-0.1 | 0.0-0.1 |
+
+### タスク固有パラメータ
+
+#### STMタスク
+- `sequence_length`: 時系列の長さ（推奨: 1000-5000）
+- `max_delay`: 最大遅延（推奨: 50-200）
+- `train_ratio`: 訓練データの割合（推奨: 0.6-0.8）
+- `washout`: ウォッシュアウト期間（推奨: 50-200）
+
+#### NARMAタスク
+- `order`: NARMA次数（高次ほど困難。推奨: 3-20）
+- `sequence_length`: 時系列の長さ（推奨: 1000-5000）
+- `train_ratio`: 訓練データの割合（推奨: 0.6-0.8）
+- `washout`: 初期の無視する時間ステップ（推奨: 50-200）
+
+## 期待される性能
+
+### STMタスク
+- **記憶容量**: リザーバサイズとおおむね線形関係
+- **典型的な値**: 100ニューロンで30-50程度
+- **容量比**: 0.3-0.5（MC/リザーバサイズ）
+
+### NARMAタスク
+- **NARMA-5**: RMSE ~0.02-0.05, R² ~0.85-0.95
+- **NARMA-10**: RMSE ~0.05-0.10, R² ~0.60-0.80
+- **NARMA-15以上**: より困難で、性能は次数とともに低下
 
 ## 高度な使用例
 
@@ -170,6 +246,25 @@ probabilities = esn_clf.predict_proba(x_test)
 predictions = esn_clf.predict_classes(x_test)
 ```
 
+### パラメータ比較実験
+
+```python
+from esn import compare_esn_parameters, plot_parameter_comparison
+
+# 複数のスペクトル半径を比較
+parameter_ranges = {
+    'spectral_radius': [0.1, 0.5, 0.9, 0.95, 0.99, 1.1]
+}
+
+comparison_results = compare_esn_parameters(
+    parameter_ranges=parameter_ranges,
+    reservoir_size=100
+)
+
+# 結果をプロット
+plot_parameter_comparison(comparison_results)
+```
+
 ### マルチステップ予測
 
 ```python
@@ -186,133 +281,98 @@ for step in range(prediction_horizon):
 predictions = torch.cat(predictions, dim=1)
 ```
 
+## 評価指標
+
+### STMタスク
+- **Memory Capacity (MC)**: 各遅延での復元精度（R²）の総和
+- **Capacity Ratio**: MC / リザーバサイズ
+
+### NARMAタスク
+- **RMSE** (Root Mean Square Error): 平方根平均二乗誤差
+- **NMSE** (Normalized Mean Square Error): 正規化平均二乗誤差
+- **R²** (Coefficient of determination): 決定係数
+- **MSE** (Mean Square Error): 平均二乗誤差
+
 ## Memory Capacity理論
 
 Memory Capacityは、ESNが過去の入力をどの程度記憶できるかを定量化する指標です：
 
-- **理論的最大値**: リザーバーサイズN
+- **理論的最大値**: リザーバサイズN
 - **実際の値**: 通常N以下（パラメータ設定に依存）
 - **計算方法**: 各遅延kについて、u(t-k)の復元精度（R²）を測定
 - **総容量**: MC = Σ MC(k)
 
-最適なESNでは、容量比（MC/N）が0.5-0.9程度になります。
+最適なESNでは、容量比（MC/N）が0.3-0.5程度になります。
+
+## トラブルシューティング
+
+### 共通の問題
+
+1. **NaN値の発生**
+   - スペクトル半径を下げる（0.95以下）
+   - 正則化パラメータ `ridge_alpha` を増やす
+   - ウォッシュアウト期間を長くする
+
+2. **性能が低い**
+   - リザーバサイズを増やす
+   - スペクトル半径を最適化（0.9-0.99）
+   - 入力スケーリングを調整
+
+3. **計算が遅い**
+   - リザーバサイズを減らす
+   - シーケンス長を短くする
+   - デバイスをGPUに変更（CUDA利用可能時）
+
+### NARMA固有の問題
+
+1. **高次NARMAでNaN値**
+   - NARMA次数を下げる（15以下を推奨）
+   - リザーバサイズを増やす
+
+2. **予測精度が悪い**
+   - ウォッシュアウト期間を調整
+   - 訓練データ比率を調整
+
+## 実装の特徴
+
+- **数値安定性**: 値のクリッピングによる爆発的成長の防止（NARMA）
+- **エラーハンドリング**: NaN/inf値の検出と適切な処理
+- **包括的な可視化**: 時系列比較、散布図、誤差変化、評価指標表示
+- **再現性**: 乱数シードによる結果の再現可能性
+- **拡張性**: 新しいタスクの追加が容易な設計
 
 ## パフォーマンス最適化
 
 ### GPU使用
 
 ```python
+# GPU利用可能時
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-esn = EchoStateNetwork(
-    input_size=1,
-    reservoir_size=100,
-    output_size=1,
-    device=device
-)
+esn = EchoStateNetwork(..., device=device)
 ```
 
 ### バッチ処理
 
 ```python
 # 複数系列の同時処理
-batch_size = 32
-x_batch = torch.randn(batch_size, sequence_length, input_size)
-y_batch = torch.randn(batch_size, sequence_length, output_size)
-
-esn.fit(x_batch, y_batch)
-predictions = esn.predict(x_batch)
+batch_size = 10
+inputs = torch.randn(batch_size, sequence_length, input_size)
+esn.reset_state(batch_size)
 ```
 
-### 可視化の最適化
+### メモリ効率化
 
-```python
-# 見やすい可視化のための推奨設定
-evaluate_memory_capacity(
-    reservoir_size=100,
-    sequence_length=800,       # 短めで高速
-    max_delay=50,              # 適度な範囲
-    train_ratio=0.7,           # 標準的な分割比
-    plot_delays=[1, 5, 10],    # 主要な遅延のみ
-)
-
-# 時系列プロットの点数制限（デフォルト200点で見やすい）
-plot_delay_accuracy(detailed_results, max_points=200)
-
-# 散布図の点数制限（デフォルト1000点で適度な密度）
-plot_scatter_accuracy(detailed_results, max_points=1000)
-```
-
-## 使用例の実行
-
-パッケージに含まれる使用例を実行：
-
-```python
-# 基本的な使用例
-python examples.py
-
-# STMタスクのみ
-python stm_task.py
-
-# 個別の例
-from esn.examples import example_simple_prediction, example_mackey_glass
-example_simple_prediction()
-example_mackey_glass()
-```
-
-## 拡張ガイド
-
-### 新しいアクティベーション関数
-
-```python
-class CustomESN(EchoStateNetwork):
-    def forward(self, input_data, reset_state=True):
-        # 親クラスのforward()をベースに、
-        # アクティベーション関数部分をカスタマイズ
-        # new_state = your_activation(input_activation + reservoir_activation)
-        pass
-```
-
-### 新しいタスク
-
-```python
-def your_custom_task():
-    # データ生成
-    x, y = generate_your_data()
-    
-    # ESN作成・学習
-    esn = EchoStateNetwork(...)
-    esn.fit(x, y)
-    
-    # 評価
-    predictions = esn.predict(x_test)
-    score = your_evaluation_metric(y_test, predictions)
-    
-    return score
-```
-
-## トラブルシューティング
-
-### よくある問題
-
-1. **不安定な学習**: スペクトル半径を下げる（< 1.0）
-2. **低いメモリ容量**: 接続密度やリザーバーサイズを増やす
-3. **過学習**: リッジ回帰の正則化パラメータを増やす
-4. **遅い収束**: washout期間を延ばす
-
-### パフォーマンス調整
-
-- **スペクトル半径**: 0.95-0.99（エッジオブカオス）
-- **接続密度**: 0.1-0.3（疎接続）
-- **入力スケーリング**: 0.5-2.0（入力のダイナミクスに依存）
-- **リーク率**: 1.0（メモリタスク）、< 1.0（高速変化タスク）
+- 大きなデータセットでは `sequence_length` を分割
+- 不要な中間状態は削除
+- `washout` を適切に設定して無駄な計算を削減
 
 ## 参考文献
 
-1. Jaeger, H. (2001). The "echo state" approach to analysing and training recurrent neural networks. GMD Report 148.
-2. Lukoševičius, M., & Jaeger, H. (2009). Reservoir computing approaches to recurrent neural network training. Computer Science Review, 3(3), 127-149.
-3. Verstraeten, D., et al. (2007). An experimental unification of reservoir computing methods. Neural networks, 20(3), 391-403.
+1. Jaeger, H. (2001). The "echo state" approach to analysing and training recurrent neural networks.
+2. Lukoševičius, M., & Jaeger, H. (2009). Reservoir computing approaches to recurrent neural network training.
+3. Verstraeten, D., et al. (2007). An experimental unification of reservoir computing methods.
+4. Atiya, A. F., & Parlos, A. G. (2000). New results on recurrent network training: unifying the algorithms and accelerating convergence.
 
 ## ライセンス
 
-MIT License 
+[ライセンス情報を記載] 
