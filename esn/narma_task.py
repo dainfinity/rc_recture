@@ -19,10 +19,20 @@ import matplotlib.pyplot as plt
 from typing import Tuple, List, Optional, Dict
 from model import EchoStateNetwork, ESNRegressor
 import warnings
+import os
+from datetime import datetime
 
-# Set up matplotlib for Japanese fonts
+# Set up matplotlib for better visualization
 import matplotlib
 matplotlib.rcParams['font.family'] = ['DejaVu Sans']
+matplotlib.rcParams['figure.dpi'] = 100
+matplotlib.rcParams['savefig.dpi'] = 300
+matplotlib.rcParams['font.size'] = 10
+matplotlib.rcParams['axes.titlesize'] = 12
+matplotlib.rcParams['axes.labelsize'] = 10
+matplotlib.rcParams['xtick.labelsize'] = 9
+matplotlib.rcParams['ytick.labelsize'] = 9
+matplotlib.rcParams['legend.fontsize'] = 9
 # Suppress font warnings
 warnings.filterwarnings('ignore', category=UserWarning, module='matplotlib')
 
@@ -197,7 +207,8 @@ def plot_narma_results(
     results: Dict,
     sequence_idx: int = 0,
     max_points: int = 500,
-    save_path: Optional[str] = None
+    save_path: Optional[str] = None,
+    order: int = 10
 ):
     """
     Plot NARMA task results with multiple visualizations.
@@ -207,6 +218,7 @@ def plot_narma_results(
         sequence_idx (int): Which sequence to plot (for multiple sequences)
         max_points (int): Maximum number of points to plot for clarity
         save_path (Optional[str]): Path to save the plot
+        order (int): NARMA order for title
     """
     predictions = results['predictions'][sequence_idx, :, 0]
     targets = results['targets_test'][sequence_idx, :, 0]
@@ -217,59 +229,72 @@ def plot_narma_results(
         predictions = predictions[::step]
         targets = targets[::step]
     
-    fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+    # Create figure with improved layout
+    fig = plt.figure(figsize=(16, 10))
+    gs = fig.add_gridspec(2, 3, hspace=0.35, wspace=0.35, 
+                         left=0.08, right=0.95, top=0.92, bottom=0.08)
     
     # Time series comparison
-    axes[0, 0].plot(targets.numpy(), 'b-', label='True values', linewidth=2, alpha=0.8)
-    axes[0, 0].plot(predictions.detach().numpy(), 'r--', label='Predictions', linewidth=2, alpha=0.8)
-    axes[0, 0].set_title('NARMA Time Series Prediction Results')
-    axes[0, 0].set_xlabel('Time Steps')
-    axes[0, 0].set_ylabel('Value')
-    axes[0, 0].legend()
-    axes[0, 0].grid(True, alpha=0.3)
+    ax1 = fig.add_subplot(gs[0, :2])
+    ax1.plot(targets.numpy(), 'b-', label='True values', linewidth=2, alpha=0.8)
+    ax1.plot(predictions.detach().numpy(), 'r--', label='Predictions', linewidth=2, alpha=0.8)
+    ax1.set_title(f'NARMA-{order} Time Series Prediction Results', fontsize=14, pad=10)
+    ax1.set_xlabel('Time Steps')
+    ax1.set_ylabel('Value')
+    ax1.legend(loc='upper right')
+    ax1.grid(True, alpha=0.3)
     
     # Scatter plot
-    axes[0, 1].scatter(targets.numpy(), predictions.detach().numpy(), alpha=0.6, s=20)
+    ax2 = fig.add_subplot(gs[0, 2])
+    ax2.scatter(targets.numpy(), predictions.detach().numpy(), alpha=0.6, s=20)
     min_val = min(targets.min().item(), predictions.min().item())
     max_val = max(targets.max().item(), predictions.max().item())
-    axes[0, 1].plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=2)
-    axes[0, 1].set_title('True vs Predicted Values')
-    axes[0, 1].set_xlabel('True Values')
-    axes[0, 1].set_ylabel('Predicted Values')
-    axes[0, 1].grid(True, alpha=0.3)
+    ax2.plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=2)
+    ax2.set_title('True vs Predicted', fontsize=12, pad=10)
+    ax2.set_xlabel('True Values')
+    ax2.set_ylabel('Predicted Values')
+    ax2.grid(True, alpha=0.3)
+    # Make scatter plot square
+    ax2.set_aspect('equal', adjustable='box')
     
     # Error over time
+    ax3 = fig.add_subplot(gs[1, :2])
     error = (targets - predictions).abs()
-    axes[1, 0].plot(error.numpy(), 'g-', linewidth=1.5)
-    axes[1, 0].set_title('Absolute Error Over Time')
-    axes[1, 0].set_xlabel('Time Steps')
-    axes[1, 0].set_ylabel('Absolute Error')
-    axes[1, 0].grid(True, alpha=0.3)
+    ax3.plot(error.numpy(), 'g-', linewidth=1.5)
+    ax3.set_title('Absolute Error Over Time', fontsize=12, pad=10)
+    ax3.set_xlabel('Time Steps')
+    ax3.set_ylabel('Absolute Error')
+    ax3.grid(True, alpha=0.3)
     
     # Metrics display
-    metrics_text = f"""Evaluation Metrics:
-    
+    ax4 = fig.add_subplot(gs[1, 2])
+    metrics_text = f"""Evaluation Metrics
+
 RMSE: {results['rmse']:.6f}
 NMSE: {results['nmse']:.6f}
 R²: {results['r2']:.6f}
 MSE: {results['mse']:.6f}
 
-Train data length: {results['train_length']}
-Test data length: {results['test_length']}
+Data Information:
+Train length: {results['train_length']}
+Test length: {results['test_length']}
 Washout: {results['washout']}"""
     
-    axes[1, 1].text(0.1, 0.9, metrics_text, transform=axes[1, 1].transAxes, 
-                    fontsize=12, verticalalignment='top',
-                    bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.8))
-    axes[1, 1].set_xlim(0, 1)
-    axes[1, 1].set_ylim(0, 1)
-    axes[1, 1].axis('off')
-    axes[1, 1].set_title('Evaluation Metrics')
+    ax4.text(0.05, 0.95, metrics_text, transform=ax4.transAxes, 
+             fontsize=10, verticalalignment='top',
+             bbox=dict(boxstyle='round,pad=0.5', facecolor='lightblue', alpha=0.8))
+    ax4.set_xlim(0, 1)
+    ax4.set_ylim(0, 1)
+    ax4.axis('off')
     
-    plt.tight_layout()
+    # Main title
+    fig.suptitle(f'NARMA-{order} Task Results', fontsize=16, y=0.97)
     
+    # Save figure
     if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor='white')
+        print(f"Figure saved to: {save_path}")
     
     plt.show()
 
@@ -290,7 +315,7 @@ def run_narma_experiment(
     random_state: Optional[int] = None,
     device: str = 'cpu',
     plot_results: bool = True,
-    save_path: Optional[str] = None
+    save_results: bool = True
 ) -> Dict:
     """
     Run complete NARMA experiment with specified parameters.
@@ -311,7 +336,7 @@ def run_narma_experiment(
         random_state (Optional[int]): Random seed
         device (str): Device to use
         plot_results (bool): Whether to plot results
-        save_path (Optional[str]): Path to save plots
+        save_results (bool): Whether to save results to file
         
     Returns:
         Dict: Complete experiment results
@@ -361,9 +386,15 @@ def run_narma_experiment(
     print(f"R²: {results['r2']:.6f}")
     print(f"MSE: {results['mse']:.6f}")
     
+    # Generate save path if saving results
+    save_path = None
+    if save_results and not np.isinf(results['rmse']):
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        save_path = f"NARMA/results/NARMA_{order}_order_{timestamp}.png"
+    
     # Plot results
     if plot_results and not np.isinf(results['rmse']):
-        plot_narma_results(results, save_path=save_path)
+        plot_narma_results(results, save_path=save_path, order=order)
     
     # Add experiment parameters to results
     results.update({
@@ -385,7 +416,8 @@ def compare_narma_orders(
     reservoir_size: int = 100,
     sequence_length: int = 2000,
     random_state: Optional[int] = None,
-    device: str = 'cpu'
+    device: str = 'cpu',
+    save_results: bool = True
 ) -> Dict:
     """
     Compare ESN performance across different NARMA orders.
@@ -396,6 +428,7 @@ def compare_narma_orders(
         sequence_length (int): Length of sequences
         random_state (Optional[int]): Random seed
         device (str): Device to use
+        save_results (bool): Whether to save results to file
         
     Returns:
         Dict: Comparison results
@@ -413,12 +446,15 @@ def compare_narma_orders(
             sequence_length=sequence_length,
             random_state=random_state,
             device=device,
-            plot_results=False
+            plot_results=False,
+            save_results=False
         )
         results[f'NARMA-{order}'] = result
     
-    # Plot comparison
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+    # Create improved comparison plot
+    fig = plt.figure(figsize=(15, 6))
+    gs = fig.add_gridspec(1, 3, hspace=0.3, wspace=0.3,
+                         left=0.08, right=0.95, top=0.88, bottom=0.15)
     
     orders_list = [results[f'NARMA-{order}']['order'] for order in orders]
     rmse_list = [results[f'NARMA-{order}']['rmse'] for order in orders]
@@ -439,28 +475,47 @@ def compare_narma_orders(
             finite_r2.append(r2)
     
     if finite_orders:
-        axes[0].plot(finite_orders, finite_rmse, 'bo-', linewidth=2, markersize=8)
-        axes[0].set_title('RMSE vs NARMA Order')
-        axes[0].set_xlabel('NARMA Order')
-        axes[0].set_ylabel('RMSE')
-        axes[0].grid(True, alpha=0.3)
+        # RMSE plot
+        ax1 = fig.add_subplot(gs[0, 0])
+        ax1.plot(finite_orders, finite_rmse, 'bo-', linewidth=2, markersize=8)
+        ax1.set_title('RMSE vs NARMA Order', fontsize=12, pad=10)
+        ax1.set_xlabel('NARMA Order')
+        ax1.set_ylabel('RMSE')
+        ax1.grid(True, alpha=0.3)
+        ax1.set_xticks(finite_orders)
         
-        axes[1].plot(finite_orders, finite_nmse, 'ro-', linewidth=2, markersize=8)
-        axes[1].set_title('NMSE vs NARMA Order')
-        axes[1].set_xlabel('NARMA Order')
-        axes[1].set_ylabel('NMSE')
-        axes[1].grid(True, alpha=0.3)
+        # NMSE plot  
+        ax2 = fig.add_subplot(gs[0, 1])
+        ax2.plot(finite_orders, finite_nmse, 'ro-', linewidth=2, markersize=8)
+        ax2.set_title('NMSE vs NARMA Order', fontsize=12, pad=10)
+        ax2.set_xlabel('NARMA Order')
+        ax2.set_ylabel('NMSE')
+        ax2.grid(True, alpha=0.3)
+        ax2.set_xticks(finite_orders)
         
-        axes[2].plot(finite_orders, finite_r2, 'go-', linewidth=2, markersize=8)
-        axes[2].set_title('R² vs NARMA Order')
-        axes[2].set_xlabel('NARMA Order')
-        axes[2].set_ylabel('R²')
-        axes[2].grid(True, alpha=0.3)
+        # R² plot
+        ax3 = fig.add_subplot(gs[0, 2])
+        ax3.plot(finite_orders, finite_r2, 'go-', linewidth=2, markersize=8)
+        ax3.set_title('R² vs NARMA Order', fontsize=12, pad=10)
+        ax3.set_xlabel('NARMA Order')
+        ax3.set_ylabel('R²')
+        ax3.grid(True, alpha=0.3)
+        ax3.set_xticks(finite_orders)
     else:
-        for ax in axes:
+        for i in range(3):
+            ax = fig.add_subplot(gs[0, i])
             ax.text(0.5, 0.5, 'No valid results', ha='center', va='center', transform=ax.transAxes)
     
-    plt.tight_layout()
+    fig.suptitle('NARMA Task Performance Comparison', fontsize=14)
+    
+    # Save comparison plot
+    if save_results:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        save_path = f"NARMA/results/NARMA_comparison_{timestamp}.png"
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=300, bbox_inches='tight', facecolor='white')
+        print(f"Comparison figure saved to: {save_path}")
+    
     plt.show()
     
     return results

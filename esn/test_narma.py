@@ -37,7 +37,7 @@ def test_easy_narma():
     print("Testing NARMA-5 experiment...")
     results = run_narma_experiment(
         order=5,
-        reservoir_size=80,
+        reservoir_size=200,
         spectral_radius=0.9,
         sequence_length=1500,
         train_ratio=0.8,
